@@ -1,0 +1,92 @@
+SNAPCHAT COMPLETE BOT - REPLACE ALL OLD FILES - UP TO 80 CREATIVES
+
+You can delete all old files and upload ALL files in this package, keeping your
+existing GitHub Secrets. Follow REPLACE_ALL_FILES.txt.
+
+Use the SAME GitHub repository. Keep its Git commit history and keep the current
+STATE_ENCRYPTION_KEY Secret unchanged. Do not delete/recreate the repository.
+
+This version automatically restores a deleted state.json.enc from the most recent
+saved version in the repository's commit history before Snapchat access. You do
+not need to upload the old state file manually or generate another refresh token.
+Saved approval records and headline history are retained through that recovery.
+
+If no state was ever committed or its history was erased, the bot starts new
+history and reports that in the log. Secrets cannot recreate unsaved records.
+Current approved/pending status checks still apply.
+
+The default source is your headline_pool.txt. No OpenAI key is needed.
+Read PERSONAL_HEADLINES.txt and replace the sample list with your 500 or 800
+personal headlines, one per line. Repository Variables are optional.
+
+HEADLINE RULE IN THIS VERSION
+The same headline may be used on many different Creatives. Each Creative keeps
+its own used list for ONE WORKFLOW RUN. Selection is RANDOM from its unused
+suitable lines. All overnight checks share that list. Used lines do not wrap
+around within a run. Starting a NEW workflow run resets headline usage.
+Approval records and pending review waits remain protected across runs.
+Each planned edit's encrypted history is pushed before the edit; a failed save
+stops that edit. Fresh approved/pending protections are then checked again.
+No new setting or Secret is needed. Keep your own headline_pool.txt when updating.
+
+OPENAI 429 IN YOUR LOG?
+Read OPENAI_429_HELP.txt. This package includes safe OpenAI error codes and
+limited retries. Install both the worker and workflow, or follow the full-file
+replacement instructions. Keep all existing Secrets and the encryption key.
+These OpenAI settings apply only to optional AI modes, not manual mode.
+
+Creating a bot for a different Ad Account?
+Open README.md and follow "New bot setup". Use a separate repository and a new
+state encryption key for that account. Start without another account's state.
+An existing valid refresh token can be used with its matching OAuth Client ID
+and Client Secret if its authorized user can access the target account.
+
+WHAT IS INCLUDED
+- Complete snap_headline_bot.py with the 80-Creative ceiling and status guards.
+- GitHub Actions workflow in .github/workflows/snapchat-headline-editor.yml.
+- state_crypto.py and requirements.txt.
+- checkpoint_encrypted_state.py to save each planned headline before the edit.
+- restore_encrypted_state.py for automatic recovery after file replacement.
+- 100 Arabic headline options and an archived historical hash list (not applied).
+- PowerShell helpers for target IDs, OAuth tokens, and encryption keys.
+- Setup guide, full replacement guide, and cross-organization authentication guide.
+- OpenAI 429 troubleshooting guide and quota-aware monitor stop handling.
+- Personal headline instructions; 500/800-line files supported without OpenAI.
+
+The ZIP contains source files, not your passwords, tokens, or saved account data.
+GitHub installs the Python dependencies from requirements.txt during each job.
+
+STATUS RULES
+Only a DISAPPROVED Creative linked exclusively to REJECTED live Ads in your
+selected squads can pass the checks. APPROVED, PENDING, PENDING_REVIEW, unknown
+statuses, and links outside your selected squads block the edit.
+Read README.md for the limitations when statuses change during a request.
+
+FIRST RUN AFTER INSTALLING THIS VERSION
+target_slot: target_1
+run_mode: test
+headline_source: manual
+max_updates: 80
+monitoring: one_check
+
+Confirm this new log line:
+Headline selection: RANDOM; no repeats per Creative within this workflow run; resets on a new run.
+
+Then verify one live edit with max_updates=1 and monitoring=one_check.
+After that succeeds and encrypted state is saved, use max_updates=60 or 80.
+
+WINDOWS HELPERS
+Extract the ZIP first. In File Explorer, open the extracted folder, click its
+address bar, type powershell, and press Enter. Run one of these commands:
+
+Find Ad Squad IDs using your existing token:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\get_snap_ids.ps1
+
+Generate a key ONLY for a new bot with no saved encrypted history:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\generate_state_key.ps1
+
+Generate a refresh token ONLY if you need one:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\get_snap_token.ps1
+
+The token and key helpers copy their result to your Windows clipboard.
+Paste the value directly into the matching GitHub Secret.

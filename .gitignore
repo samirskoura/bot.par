@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.env
+snap_resources.json
+state.json
+.state-*.tmp
+state.json.tmp
+state.json.enc.tmp
+state-recovery-*.tmp

@@ -1,0 +1,79 @@
+OPENAI HTTP 429 - WHAT TO DO
+
+The current default is manual mode: your own headline_pool.txt, no OpenAI calls.
+Read PERSONAL_HEADLINES.txt to use your personal list without an OpenAI key.
+The remaining troubleshooting steps apply only to optional OpenAI modes.
+
+The supplied September 13 log shows Snapchat authentication succeeded, four
+Creatives were updated, and encrypted history was committed successfully.
+The monitor then stopped after five OpenAI 429 responses. The hidden response
+does not identify whether this was a temporary rate limit or an account limit.
+
+INSTALL THIS COMPLETE PACKAGE
+The ZIP contains every bot file. To replace every old file and retain your
+Secrets, follow REPLACE_ALL_FILES.txt in the SAME GitHub repository.
+Keep the existing STATE_ENCRYPTION_KEY and Git commit history for state recovery.
+
+For an update without deleting files, replace BOTH:
+  snap_headline_bot.py
+  .github/workflows/snapchat-headline-editor.yml
+Replace your existing active workflow's content with the supplied YAML; avoid
+leaving two workflows that start the bot. A workflow at the repository root
+does not run. The other files are included for a complete installation.
+
+No new Secret is required. An OpenAI error does not require another Snapchat
+refresh token or another state encryption key.
+
+NEXT TEST
+If scheduled runs are enabled, set the existing BOT_ENABLED Variable to false
+until the OpenAI issue is resolved. The error stops this monitor, but it does
+not disable future scheduled jobs or other repositories using the API account.
+
+Run once using the same target as your uploaded log:
+  target_slot: target_2
+  run_mode: test
+  headline_source: manual_then_openai
+  max_updates: 80
+  monitoring: one_check
+
+Read the line containing openai_error=. Only share that redacted error line.
+Never share the API key or turn off PUBLIC_SAFE_LOGS to inspect response text.
+
+ERROR CODES
+- credit_balance_exhausted: review prepaid API credits.
+- organization_spend_limit_exceeded / project_spend_limit_exceeded: review the
+  corresponding spend limit.
+- organization_usage_limit_exceeded: review the approved API usage limit.
+- insufficient_quota: review API billing, credits and limits.
+- rate_limit_exceeded / slow_down: the bot waits and retries within its limits.
+- unknown: the response does not establish the cause; do not assume expiry or
+  depleted credit.
+
+Use the OpenAI organization/project belonging to OPENAI_API_KEY:
+Billing: https://platform.openai.com/settings/organization/billing/overview
+Limits: https://platform.openai.com/settings/organization/limits
+Official error guide: https://developers.openai.com/api/docs/guides/error-codes
+
+This update cannot change account credits, spend limits or granted API limits.
+It gives a private diagnostic and stops repeating errors that require action.
+
+HEADLINE SKIPS ARE A SEPARATE RESULT
+In the old log's first check, 24 Creatives received no accepted headline under
+the former account-wide uniqueness rule. This version allows the same headline
+on many different Creatives. Repeat checks use only the individual Creative's
+own history; AI options also have a near-duplicate check. Length and internal-name
+checks still apply. HTTP 429
+is independent of those checks and can prevent OpenAI generation.
+
+80 is the maximum eligible unique Creatives per check, not a promised count.
+Your selected squad contained only 28 Ads. Eligibility and each Creative's own
+history can reduce the edit count further. Keep the saved history.
+If one Creative exhausts its options, add new truthful product-relevant lines
+to headline_pool.txt and use one test check to preview them.
+
+The four edited Creatives entered review; later checks showed all 28 Ads rejected
+again. A new headline cannot guarantee approval. Review the rejection reasons
+in Snapchat if the problem concerns the product, video or landing page.
+
+All existing approved/pending, shared-Creative and conditional-PATCH checks are
+retained. No live Snapchat or OpenAI calls were made while preparing this update.

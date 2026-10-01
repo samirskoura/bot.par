@@ -1,0 +1,84 @@
+USE YOUR OWN HEADLINES - RANDOM, ONCE PER CREATIVE PER RUN - NO OPENAI KEY
+
+UPDATING AN EXISTING BOT
+Keep your personal headline_pool.txt, state.json.enc and existing Secrets.
+The ZIP includes sample headlines; replace its samples with your own file before
+uploading. Install checkpoint_encrypted_state.py as well as snap_headline_bot.py.
+Let the running job finish first, then upload the update in the same repository.
+For full replacement, follow REPLACE_ALL_FILES.txt.
+
+1. Extract the complete ZIP on your computer.
+2. Open headline_pool.txt in Notepad.
+3. Replace ALL the sample lines with your own 400, 500 or 800 headlines.
+   Put ONE headline on each line. Do not add numbers, bullets, quotation marks,
+   column headings, or commas between separate headlines.
+4. Each Arabic headline must fit within 34 characters, including spaces.
+   Save as UTF-8 and keep the filename exactly headline_pool.txt.
+5. Upload it with the complete package. For an existing bot, follow
+   REPLACE_ALL_FILES.txt in the SAME repository with your existing Secrets.
+6. In Actions -> Run workflow, choose:
+     target_slot: your selected target (for example target_2)
+     run_mode: test
+     headline_source: manual
+     max_updates: 80
+     monitoring: one_check
+7. Confirm the log says:
+     Bot version: 2026.09.13-random-per-workflow-run
+     Headline selection: RANDOM; no repeats per Creative within this workflow run; resets on a new run.
+     Manual headline pool: ... distinct lines loaded; OpenAI is disabled.
+   The number may be smaller if your file contains repeated or blank lines.
+8. Check the target and preview count, then use live mode for actual edits.
+   Keep headline_source=manual for live and overnight runs too.
+
+HOW YOUR LIST IS USED
+- Each eligible Creative gets a RANDOM suitable line from the headlines it has
+  not already used during THIS workflow run. It does not follow file order.
+- All overnight checks belong to one run; usage does not reset every 60 seconds.
+- Starting another workflow run resets headline usage automatically. Previously
+  used lines become available again. Its current headline is still excluded.
+- Different Creatives can use the same line, including 10 or 80 at once.
+- After an edit, that Creative waits for review. A confirmed later rejection
+  makes it eligible for another random unused suitable line.
+- No headline is reused on that same Creative once it is in THIS RUN's usage list.
+  Changes only to spacing, punctuation, diacritics or invisible formatting still
+  count as the same wording. Duplicate lines are ignored and do not increase
+  their chance of selection.
+- Distinct personal lines are allowed even when their wording is similar.
+- A Creative that exhausts the list is skipped for the rest of this run. A NEW
+  workflow run starts fresh. Other eligible Creatives can continue in this run.
+- APPROVED, PENDING and unknown review statuses remain protected. Existing
+  linked-Ad checks and conditional Creative PATCH protections are retained.
+- Lines that exceed 34 characters or contain an internal resource name are skipped.
+
+Before each live edit on GitHub Actions, the bot reserves that headline in the
+Creative's history, encrypts it and pushes it to GitHub. A failed save stops the
+edit. Statuses and linked Ads are checked again AFTER the save. The log says:
+  Encrypted headline reservation saved before edit.
+This adds one encrypted history commit per planned edit plus the cycle's final save.
+
+Reserved lines are not recycled within this run, even if a status check skips the edit.
+If a run is interrupted and the result cannot be confirmed, that Creative waits
+instead of retrying an uncertain edit. Other eligible Creatives can continue.
+Only headline usage resets. Approval records, pending reviews and uncertain edits
+remain protected across workflow runs. Keep state.json.enc and its encryption key.
+Manual launches, scheduled launches and GitHub re-run attempts each start a new
+headline list. You do not need to delete any state file or change any Secret.
+
+800 headlines means 800 candidate options for each Creative. The separate limit
+of 80 is the maximum number of eligible Creatives edited in one check.
+
+SECRETS
+Manual mode needs your Snapchat credentials and the state encryption key.
+OPENAI_API_KEY and PRODUCT_CONTEXT are NOT required. Existing OpenAI Secrets can
+remain; they are unused in manual mode. No OpenAI generation is requested.
+Retain STATE_ENCRYPTION_KEY and the saved history in this same repository.
+
+ADDING MORE LINES LATER
+Update headline_pool.txt after the running job finishes, commit the file, then
+start a new workflow run. A job already running uses its checked-out file.
+Reordering lines during a run does not reset usage. The next workflow launch does.
+
+OPTIONAL AI MODES
+manual_then_openai tries your list first, then asks OpenAI for remaining candidates.
+openai generates suggestions directly. These modes need OPENAI_API_KEY and
+PRODUCT_CONTEXT. Keep manual selected if you want only your own text.

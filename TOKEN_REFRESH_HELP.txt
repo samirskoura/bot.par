@@ -1,0 +1,61 @@
+SNAPCHAT TOKEN REFRESH HTTP 400
+
+This error happens before the bot reads or edits Snapchat ads. It does not
+identify which credential failed. The update now logs only a recognized OAuth
+error code, never Snapchat's raw token response, descriptions or headers.
+
+FIRST CHECK
+In GitHub -> Settings -> Secrets and variables -> Actions -> Secrets, verify:
+SNAP_CLIENT_ID
+SNAP_CLIENT_SECRET
+SNAP_REFRESH_TOKEN
+
+Use the Client ID and Client Secret from the same OAuth app. Use a refresh token
+authorized for that app. Paste values only, without labels, quotes or Bearer.
+SNAP_REFRESH_TOKEN must not contain an access token or STATE_ENCRYPTION_KEY.
+
+Run test + max_updates=80 + one_check. Read the oauth_error=... part of the error.
+Do not disable PUBLIC_SAFE_LOGS or post your credentials/full token response.
+
+invalid_client
+Snapchat rejected app authentication. Re-enter the correct Client ID and Client
+Secret from the same app. If the old app was deleted or its credentials changed,
+use the current app credentials and authorize that app again.
+
+invalid_grant
+The refresh token is invalid, revoked, expired or belongs to another app.
+After confirming the app credentials, obtain a new token:
+1. Extract the ZIP and open its folder in File Explorer.
+2. Click the folder address bar, type powershell, and press Enter.
+3. Run:
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\get_snap_token.ps1
+4. Enter the Redirect URI configured on your OAuth app, Client ID and Client Secret.
+5. Sign in as the Snapchat user that can edit the target Ad Account.
+6. Follow the helper instructions. It copies the refresh token to your clipboard.
+7. Paste that value into the GitHub SNAP_REFRESH_TOKEN Secret and save it.
+8. Repeat the GitHub test run.
+
+invalid_request
+Check that the three Snapchat Secrets contain the raw values without extra
+labels or quotes. The bot uses Snapchat's documented form-encoded refresh request.
+
+unauthorized_client / unsupported_grant_type / invalid_scope
+Check the OAuth app's authorization and the snapchat-marketing-api scope.
+
+server_error / temporarily_unavailable
+Try one test again later. These codes alone do not establish that your tokens
+are invalid.
+
+unknown
+Snapchat did not provide a recognized OAuth error code. Share only the new error
+line and HTTP status; keep the raw response and credentials private.
+
+The age of a refresh token alone does not establish that it expired. The short
+access-token lifetime is different from refresh-token validity.
+
+STATE_ENCRYPTION_KEY encrypts the bot's history. Changing it cannot fix Snapchat
+OAuth authentication and would prevent decryption of the existing state.
+
+References:
+https://developers.snap.com/marketing-api/Ads-API/authentication
+https://www.rfc-editor.org/rfc/rfc6749.html#section-5.2
