@@ -1,0 +1,288 @@
+name: Snapchat Second Ad Account Headline Monitor
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_slot:
+        description: "Private target saved in SNAP_TARGET_1 through SNAP_TARGET_5"
+        required: true
+        default: target_1
+        type: choice
+        options:
+          - target_1
+          - target_2
+          - target_3
+          - target_4
+          - target_5
+      run_mode:
+        description: "Test previews; Live saves and monitors the selected target"
+        required: true
+        default: test
+        type: choice
+        options:
+          - test
+          - live
+      max_updates:
+        description: "Maximum total creatives changed per check (1-80)"
+        required: true
+        default: "80"
+        type: string
+      headline_source:
+        description: "manual = your headline_pool.txt only, no OpenAI key needed"
+        required: true
+        default: manual
+        type: choice
+        options:
+          - manual
+          - manual_then_openai
+          - openai
+      monitoring:
+        description: "Overnight checks every 60s for 5.5h; no repeats until a new workflow run"
+        required: true
+        default: overnight
+        type: choice
+        options:
+          - overnight
+          - one_check
+  schedule:
+    - cron: "*/5 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: snapchat-second-account-headline-editor
+  cancel-in-progress: false
+
+jobs:
+  edit-headlines:
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.BOT_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      SNAP_CLIENT_ID: ${{ secrets.SNAP_CLIENT_ID }}
+      SNAP_CLIENT_SECRET: ${{ secrets.SNAP_CLIENT_SECRET }}
+      SNAP_REFRESH_TOKEN: ${{ secrets.SNAP_REFRESH_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      SNAP_AD_ACCOUNT_ID: ${{ secrets.SNAP_AD_ACCOUNT_ID }}
+      SNAP_AD_SQUAD_IDS: ${{ secrets.SNAP_AD_SQUAD_IDS }}
+      SNAP_TARGET_1: ${{ secrets.SNAP_TARGET_1 }}
+      SNAP_TARGET_2: ${{ secrets.SNAP_TARGET_2 }}
+      SNAP_TARGET_3: ${{ secrets.SNAP_TARGET_3 }}
+      SNAP_TARGET_4: ${{ secrets.SNAP_TARGET_4 }}
+      SNAP_TARGET_5: ${{ secrets.SNAP_TARGET_5 }}
+      PRODUCT_CONTEXT: ${{ secrets.PRODUCT_CONTEXT }}
+      STATE_ENCRYPTION_KEY: ${{ secrets.STATE_ENCRYPTION_KEY }}
+      TARGET_SLOT: ${{ github.event_name == 'workflow_dispatch' && inputs.target_slot || '' }}
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+      HEADLINE_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.headline_source || vars.HEADLINE_SOURCE || 'manual' }}
+      MAX_UPDATES: ${{ github.event_name == 'workflow_dispatch' && inputs.max_updates || '30' }}
+      RUN_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.run_mode || vars.RUN_MODE }}
+      MONITOR_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.run_mode == 'live' && inputs.monitoring == 'overnight' && 'true' || 'false' }}
+      MONITOR_MINUTES: "330"
+      CHECK_INTERVAL_SECONDS: "60"
+      PUBLIC_SAFE_LOGS: "true"
+
+    steps:
+      - name: Download repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Load the latest saved review state on this branch, including on re-runs.
+          ref: ${{ github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependency
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Validate state encryption before Snapchat access
+        shell: bash
+        run: |
+          set -euo pipefail
+          VALIDATION_DIR="$(mktemp -d)"
+          trap 'rm -rf "${VALIDATION_DIR}"' EXIT
+          printf '{"validation":true}\n' > "${VALIDATION_DIR}/plain.json"
+          python state_crypto.py encrypt \
+            "${VALIDATION_DIR}/plain.json" "${VALIDATION_DIR}/state.json.enc"
+          python state_crypto.py decrypt \
+            "${VALIDATION_DIR}/state.json.enc" "${VALIDATION_DIR}/restored.json"
+          cmp --silent "${VALIDATION_DIR}/plain.json" "${VALIDATION_DIR}/restored.json"
+          echo "State encryption preflight passed."
+
+      - name: Configure encrypted state persistence
+        if: ${{ env.RUN_MODE == 'live' }}
+        run: |
+          git config user.name "snap-headline-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Check rejected ads and monitor reviews
+        shell: bash
+        run: |
+          set -uo pipefail
+          umask 077
+
+          LAST_SAVED_STATE_HASH=""
+
+          resolve_target() {
+            if [[ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]]; then
+              export REQUESTED_AD_SQUAD_IDS=""
+              return 0
+            fi
+
+            case "${TARGET_SLOT}" in
+              target_1) TARGET_IDS="${SNAP_TARGET_1:-}" ;;
+              target_2) TARGET_IDS="${SNAP_TARGET_2:-}" ;;
+              target_3) TARGET_IDS="${SNAP_TARGET_3:-}" ;;
+              target_4) TARGET_IDS="${SNAP_TARGET_4:-}" ;;
+              target_5) TARGET_IDS="${SNAP_TARGET_5:-}" ;;
+              *)
+                echo "ERROR: Unknown target slot."
+                return 1
+                ;;
+            esac
+
+            if [[ -z "${TARGET_IDS}" ]]; then
+              echo "ERROR: The selected target slot has no GitHub Secret value."
+              return 1
+            fi
+            export REQUESTED_AD_SQUAD_IDS="${TARGET_IDS}"
+          }
+
+          restore_state() {
+            if [[ -z "${STATE_ENCRYPTION_KEY:-}" ]]; then
+              echo "ERROR: Required GitHub Secret STATE_ENCRYPTION_KEY is missing."
+              return 1
+            fi
+            if git ls-files --error-unmatch state.json >/dev/null 2>&1; then
+              echo "ERROR: Plaintext state.json is tracked. Remove it and its public history before running."
+              return 1
+            fi
+
+            rm -f state.json
+            if ! python restore_encrypted_state.py; then
+              echo "ERROR: Could not recover saved history. Stopping before Snapchat access."
+              return 1
+            fi
+            if [[ -f state.json.enc ]]; then
+              if ! python state_crypto.py decrypt state.json.enc state.json; then
+                rm -f state.json
+                echo "ERROR: Saved state could not be decrypted. Check STATE_ENCRYPTION_KEY."
+                return 1
+              fi
+            fi
+
+            if [[ -f state.json ]] && git ls-files --error-unmatch state.json.enc >/dev/null 2>&1; then
+              LAST_SAVED_STATE_HASH="$(sha256sum state.json | awk '{print $1}')"
+            fi
+          }
+
+          save_state() {
+            if [[ "${RUN_MODE}" != "live" || ! -f state.json ]]; then
+              return 0
+            fi
+
+            CURRENT_STATE_HASH="$(sha256sum state.json | awk '{print $1}')"
+            if [[ "${CURRENT_STATE_HASH}" == "${LAST_SAVED_STATE_HASH}" ]]; then
+              return 0
+            fi
+
+            rm -f state.json.enc.tmp
+            if ! python state_crypto.py encrypt state.json state.json.enc.tmp; then
+              rm -f state.json.enc.tmp
+              echo "ERROR: Could not encrypt bot state."
+              return 1
+            fi
+            mv state.json.enc.tmp state.json.enc
+            git add state.json.enc
+
+            if git diff --cached --quiet -- state.json.enc; then
+              LAST_SAVED_STATE_HASH="${CURRENT_STATE_HASH}"
+              return 0
+            fi
+
+            git commit -m "Update encrypted Snapchat state"
+            for push_attempt in 1 2 3; do
+              if git push; then
+                LAST_SAVED_STATE_HASH="${CURRENT_STATE_HASH}"
+                return 0
+              fi
+              echo "Encrypted state push failed (${push_attempt}/3); retrying shortly."
+              sleep $((push_attempt * 3))
+            done
+
+            echo "ERROR: Could not save encrypted state after three push attempts."
+            return 1
+          }
+
+          run_cycle() {
+            set +e
+            CYCLE_OUTPUT="$(python snap_headline_bot.py 2>&1)"
+            CYCLE_CODE=$?
+            set -e
+
+            printf '%s\n' "${CYCLE_OUTPUT}"
+
+            if ! save_state; then
+              return 90
+            fi
+            return "${CYCLE_CODE}"
+          }
+
+          resolve_target || exit $?
+          restore_state || exit $?
+
+          if [[ "${MONITOR_MODE}" != "true" ]]; then
+            run_cycle
+            exit $?
+          fi
+
+          echo "MULTI-SQUAD OVERNIGHT MONITOR STARTED: checking the private target every ${CHECK_INTERVAL_SECONDS}s for up to ${MONITOR_MINUTES} minutes."
+          echo "This running job does not depend on GitHub starting another five-minute schedule."
+
+          DEADLINE=$(( $(date +%s) + MONITOR_MINUTES * 60 ))
+          CYCLE_NUMBER=0
+          CONSECUTIVE_FAILURES=0
+
+          while (( $(date +%s) < DEADLINE )); do
+            CYCLE_NUMBER=$((CYCLE_NUMBER + 1))
+            echo
+            echo "===== MONITOR CHECK ${CYCLE_NUMBER} at $(date -u +'%Y-%m-%dT%H:%M:%SZ') ====="
+
+            if run_cycle; then
+              CONSECUTIVE_FAILURES=0
+            else
+              CYCLE_CODE=$?
+              CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+              echo "Monitor check failed with exit code ${CYCLE_CODE} (${CONSECUTIVE_FAILURES}/5)."
+              if (( CYCLE_CODE == 78 )); then
+                echo "ERROR: OpenAI generation stopped. Follow the openai_error guidance above before restarting."
+                exit "${CYCLE_CODE}"
+              fi
+              if (( CYCLE_CODE == 90 || CONSECUTIVE_FAILURES >= 5 )); then
+                echo "ERROR: Monitor stopped to avoid unsafe repeated processing."
+                exit "${CYCLE_CODE}"
+              fi
+            fi
+
+            if printf '%s\n' "${CYCLE_OUTPUT:-}" | grep -q '^MONITOR_COMPLETE=true$'; then
+              echo "ALL SELECTED ADS ARE APPROVED. Overnight monitor finished early."
+              exit 0
+            fi
+
+            REMAINING=$(( DEADLINE - $(date +%s) ))
+            if (( REMAINING <= 0 )); then
+              break
+            fi
+            SLEEP_FOR="${CHECK_INTERVAL_SECONDS}"
+            if (( SLEEP_FOR > REMAINING )); then
+              SLEEP_FOR="${REMAINING}"
+            fi
+            echo "Next Snapchat status check in ${SLEEP_FOR} seconds."
+            sleep "${SLEEP_FOR}"
+          done
+
+          echo "OVERNIGHT MONITOR FINISHED after ${MONITOR_MINUTES} minutes."
