@@ -23,7 +23,7 @@ on:
           - test
           - live
       max_updates:
-        description: "Maximum total creatives changed per check (1-80)"
+        description: "Maximum total creatives changed per check (1-200 across all selected squads)"
         required: true
         default: "80"
         type: string
