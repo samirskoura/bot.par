@@ -37,7 +37,7 @@ on:
           - manual_then_openai
           - openai
       monitoring:
-        description: "Overnight checks every 60s for 5.5h; no repeats until a new workflow run"
+        description: "Overnight monitoring for 5.5h; 30s pause after each check; no repeats within a run"
         required: true
         default: overnight
         type: choice
@@ -219,14 +219,24 @@ jobs:
           }
 
           run_cycle() {
+            CYCLE_LOG="$(mktemp)" || return 90
             set +e
-            CYCLE_OUTPUT="$(python snap_headline_bot.py 2>&1)"
-            CYCLE_CODE=$?
+            python -u snap_headline_bot.py 2>&1 | tee "${CYCLE_LOG}"
+            CYCLE_PIPE_STATUS=("${PIPESTATUS[@]}")
+            CYCLE_CODE="${CYCLE_PIPE_STATUS[0]}"
+            CYCLE_LOG_CODE="${CYCLE_PIPE_STATUS[1]}"
             set -e
 
-            printf '%s\n' "${CYCLE_OUTPUT}"
+            if ! CYCLE_OUTPUT="$(cat "${CYCLE_LOG}")"; then
+              CYCLE_LOG_CODE=1
+            fi
+            rm -f "${CYCLE_LOG}"
 
             if ! save_state; then
+              return 90
+            fi
+            if (( CYCLE_LOG_CODE != 0 )); then
+              echo "ERROR: Could not capture the current check's completion status. Stopping."
               return 90
             fi
             return "${CYCLE_CODE}"
@@ -240,7 +250,7 @@ jobs:
             exit $?
           fi
 
-          echo "MULTI-SQUAD OVERNIGHT MONITOR STARTED: checking the private target every ${CHECK_INTERVAL_SECONDS}s for up to ${MONITOR_MINUTES} minutes."
+          echo "MULTI-SQUAD OVERNIGHT MONITOR STARTED: monitoring for up to ${MONITOR_MINUTES} minutes, with a ${CHECK_INTERVAL_SECONDS}s pause after each completed check."
           echo "This running job does not depend on GitHub starting another five-minute schedule."
 
           DEADLINE=$(( $(date +%s) + MONITOR_MINUTES * 60 ))
