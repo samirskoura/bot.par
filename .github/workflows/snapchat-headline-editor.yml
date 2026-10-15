@@ -80,7 +80,7 @@ jobs:
       RUN_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.run_mode || vars.RUN_MODE }}
       MONITOR_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.run_mode == 'live' && inputs.monitoring == 'overnight' && 'true' || 'false' }}
       MONITOR_MINUTES: "330"
-      CHECK_INTERVAL_SECONDS: "60"
+      CHECK_INTERVAL_SECONDS: "30"
       PUBLIC_SAFE_LOGS: "true"
 
     steps:
